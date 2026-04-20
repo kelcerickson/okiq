@@ -91,9 +91,18 @@ export default function LiveMatch() {
 
   async function finishMatch() {
     setSaving(true)
-    const { error } = await supabase.from('matches').update({ finished: true }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
-    router.push(`/match/${id}`)
+    // Set a 5 second timeout — if Supabase is slow we still navigate home
+    const timeout = setTimeout(() => {
+      router.push('/')
+    }, 5000)
+    try {
+      await supabase.from('matches').update({ finished: true }).eq('id', id)
+      clearTimeout(timeout)
+      router.push('/')
+    } catch (e) {
+      clearTimeout(timeout)
+      router.push('/')
+    }
   }
 
   const activeEntry = posEntries.find(e => e.match_player_id === activeMp?.id && e.active)
