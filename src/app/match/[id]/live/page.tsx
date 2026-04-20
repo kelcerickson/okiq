@@ -14,10 +14,14 @@ export default function LiveMatch() {
   const [stats, setStats] = useState([])
   const [activePlayerId, setActivePlayerId] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [showFinishModal, setShowFinishModal] = useState(false)
+  const [ourScore, setOurScore] = useState('')
+  const [theirScore, setTheirScore] = useState('')
+  const [finishing, setFinishing] = useState(false)
 
   const load = useCallback(async () => {
     const [{ data: m }, { data: mp }] = await Promise.all([
-      supabase.from('matches').select('opponent,match_date,location,join_code').eq('id', id).single(),
+      supabase.from('matches').select('opponent,match_date,location,join_code,finished,our_score,their_score,result').eq('id', id).single(),
       supabase.from('match_players').select('id,player_id,current_pos,player:players(id,name,jersey_number)').eq('match_id', id),
     ])
     if (m) setMatch(m)
@@ -58,10 +62,8 @@ export default function LiveMatch() {
       if (existing) {
         const defs = STAT_DEFS[pos] || []
         const statsToInsert = defs.flatMap(s => s.type === 'rate'
-          ? [
-              { position_entry_id: existing.id, stat_key: s.key + '_hit', value: 0 },
-              { position_entry_id: existing.id, stat_key: s.key + '_miss', value: 0 }
-            ]
+          ? [{ position_entry_id: existing.id, stat_key: s.key + '_hit', value: 0 },
+             { position_entry_id: existing.id, stat_key: s.key + '_miss', value: 0 }]
           : [{ position_entry_id: existing.id, stat_key: s.key, value: 0 }]
         )
         await supabase.from('stats').insert(statsToInsert)
@@ -76,104 +78,107 @@ export default function LiveMatch() {
   async function adjustStat(entryId, statKey, delta) {
     const current = stats.find(s => s.position_entry_id === entryId && s.stat_key === statKey)
     const newVal = Math.max(0, (current?.value || 0) + delta)
-
     const { error } = await supabase.from('stats')
       .update({ value: newVal })
       .eq('position_entry_id', entryId)
       .eq('stat_key', statKey)
-
     if (!error) {
       setStats(prev => {
         const idx = prev.findIndex(s => s.position_entry_id === entryId && s.stat_key === statKey)
-        if (idx >= 0) {
-          const next = [...prev]
-          next[idx] = { ...next[idx], value: newVal }
-          return next
-        }
+        if (idx >= 0) { const next = [...prev]; next[idx] = { ...next[idx], value: newVal }; return next }
         return [...prev, { id: '', position_entry_id: entryId, stat_key: statKey, value: newVal }]
       })
     }
   }
 
-  async function finishMatch() {
-    setSaving(true)
-    const { error } = await supabase.from('matches').update({ finished: true }).eq('id', id)
-    if (error) {
-      alert('Error finishing match: ' + error.message)
-      setSaving(false)
-      return
-    }
-    router.push(`/match/${id}`)
+  function openFinishModal() {
+    if (match?.our_score !== null && match?.our_score !== undefined) setOurScore(String(match.our_score))
+    if (match?.their_score !== null && match?.their_score !== undefined) setTheirScore(String(match.their_score))
+    setShowFinishModal(true)
   }
 
+  async function confirmFinish() {
+    setFinishing(true)
+    const os = ourScore !== '' ? parseInt(ourScore) : null
+    const ts = theirScore !== '' ? parseInt(theirScore) : null
+    let result = null
+    if (os !== null && ts !== null) {
+      result = os > ts ? 'W' : os < ts ? 'L' : 'D'
+    }
+    const timeout = setTimeout(() => { router.push('/') }, 5000)
+    try {
+      await supabase.from('matches').update({
+        finished: true,
+        our_score: os,
+        their_score: ts,
+        result,
+      }).eq('id', id)
+      clearTimeout(timeout)
+      router.push('/')
+    } catch (e) {
+      clearTimeout(timeout)
+      router.push('/')
+    }
+  }
+
+  const getVal = (entryId, key) => stats.find(s => s.position_entry_id === entryId && s.stat_key === key)?.value || 0
   const activeEntry = posEntries.find(e => e.match_player_id === activeMp?.id && e.active)
   const activeDefs = activeEntry ? (STAT_DEFS[activeEntry.position] || []) : []
   const prevEntries = posEntries.filter(e => e.match_player_id === activeMp?.id && !e.active)
 
-  if (!match) return (
-    <div className="shell">
-      <div className="body"><div className="nodata">Loading...</div></div>
-    </div>
-  )
+  if (!match) return <div className="shell"><div className="body"><div className="nodata">Loading...</div></div></div>
 
   return (
     <div className="shell">
       <header className="hdr">
         <Link href="/" className="btn btn-ghost btn-sm">← Home</Link>
-        <button className="btn btn-oneon btn-sm" onClick={finishMatch} disabled={saving}>
-          {saving ? 'Saving...' : 'Finish match'}
+        <button className="btn btn-oneon btn-sm" onClick={openFinishModal}>
+          Finish match
         </button>
       </header>
       <div className="body">
+
+        {/* Match banner */}
         <div className="mbanner">
-          <div style={{ fontSize: 19, fontWeight: 500 }}>vs {match.opponent}</div>
-          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+          <div style={{ fontSize: 18, fontWeight: 600, color: '#fff' }}>vs {match.opponent}</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>
             {match.match_date}{match.location ? ` · ${match.location}` : ''}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--neon)', marginTop: 4 }}>
-            Join code: <strong>{match.join_code}</strong> — share with parents to co-log
+          <div style={{ fontSize: 12, color: '#AAFF00', marginTop: 5 }}>
+            Join code: <strong>{match.join_code}</strong>
           </div>
-          <div className="lbadge">
-            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#000' }} />
-            Live
+          <div className="lbadge" style={{ marginTop: 8 }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#000' }} />Live
           </div>
         </div>
 
+        {/* Player chips */}
         <div className="slbl">Players</div>
-        <div style={{ marginBottom: 13, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+        <div style={{ marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
           {matchPlayers.map(mp => (
-            <div
-              key={mp.player_id}
+            <div key={mp.player_id}
               className={`pchip ${mp.player_id === activePlayerId ? 'active' : ''}`}
-              onClick={() => setActivePlayerId(mp.player_id)}
-            >
+              onClick={() => setActivePlayerId(mp.player_id)}>
               {mp.player.name.split(' ')[0]}
-              {mp.player.jersey_number && (
-                <span style={{ fontSize: 10, opacity: .6 }}> #{mp.player.jersey_number}</span>
-              )}
-              {mp.current_pos && (
-                <span className={`pp pp-${mp.current_pos}`} style={{ fontSize: 10, padding: '1px 5px' }}>
-                  {mp.current_pos}
-                </span>
-              )}
+              {mp.player.jersey_number && <span style={{ fontSize: 10, opacity: .6 }}> #{mp.player.jersey_number}</span>}
+              {mp.current_pos && <span className={`pp pp-${mp.current_pos}`} style={{ fontSize: 10, padding: '1px 5px', marginLeft: 2 }}>{mp.current_pos}</span>}
             </div>
           ))}
         </div>
 
+        {/* Active player card */}
         {activeMp && (
           <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 13 }}>
-              <div className="av" style={{ width: 38, height: 38 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div className="av" style={{ width: 40, height: 40, fontSize: 14 }}>
                 {activeMp.player.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
               </div>
               <div>
-                <div style={{ fontWeight: 500, fontSize: 15 }}>
+                <div style={{ fontWeight: 600, fontSize: 16, color: '#1A1A1A' }}>
                   {activeMp.player.name}
-                  {activeMp.player.jersey_number && (
-                    <span style={{ fontSize: 12, color: 'var(--muted)' }}> #{activeMp.player.jersey_number}</span>
-                  )}
+                  {activeMp.player.jersey_number && <span style={{ fontSize: 13, color: '#888', marginLeft: 6 }}>#{activeMp.player.jersey_number}</span>}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
                   {activeMp.current_pos
                     ? <span className={`pp pp-${activeMp.current_pos}`}>{POSITION_LABELS[activeMp.current_pos]}</span>
                     : 'No position set'}
@@ -182,13 +187,9 @@ export default function LiveMatch() {
             </div>
 
             <div className="slbl">Position</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-              {(['F', 'M', 'D', 'G']).map(pos => (
-                <button
-                  key={pos}
-                  className={`pbtn ${activeMp.current_pos === pos ? 'a' + pos : ''}`}
-                  onClick={() => setPosition(pos)}
-                >
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+              {(['F','M','D','G']).map(pos => (
+                <button key={pos} className={`pbtn ${activeMp.current_pos === pos ? 'a' + pos : ''}`} onClick={() => setPosition(pos)}>
                   {POSITION_LABELS[pos]}
                 </button>
               ))}
@@ -197,43 +198,43 @@ export default function LiveMatch() {
             {activeEntry ? (
               <>
                 <div className="slbl">Stats — {POSITION_LABELS[activeEntry.position]}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(155px,1fr))', gap: 9, marginTop: 9 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
                   {activeDefs.map(s => {
                     if (s.type === 'rate') {
-                      const hit = stats.find(st => st.position_entry_id === activeEntry.id && st.stat_key === s.key + '_hit')?.value || 0
-                      const miss = stats.find(st => st.position_entry_id === activeEntry.id && st.stat_key === s.key + '_miss')?.value || 0
+                      const hit = getVal(activeEntry.id, s.key + '_hit')
+                      const miss = getVal(activeEntry.id, s.key + '_miss')
                       const tot = hit + miss
                       const rate = tot > 0 ? ((hit / tot) * 100).toFixed(1) + '%' : '—'
                       return (
-                        <div key={s.key} className="sblk">
-                          <div className="sblk-l">{s.label}</div>
-                          <div className="sblk-v">{rate}</div>
-                          <div className="sblk-s">{tot > 0 ? `${hit}/${tot} attempts` : ''}</div>
-                          {[
-                            { key: s.key + '_hit', label: s.hitL, val: hit },
-                            { key: s.key + '_miss', label: s.missL, val: miss }
-                          ].map(row => (
-                            <div key={row.key} className="crow">
-                              <span className="clbl">{row.label}</span>
-                              <div className="cc">
-                                <button className="cb minus" onClick={() => adjustStat(activeEntry.id, row.key, -1)}>−</button>
-                                <span className="cv">{row.val}</span>
-                                <button className="cb plus" onClick={() => adjustStat(activeEntry.id, row.key, 1)}>+</button>
+                        <div key={s.key} style={{ background: '#1E1E1E', borderRadius: 12, padding: '14px 16px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{s.label}</span>
+                            <span style={{ fontSize: 26, fontWeight: 700, color: '#AAFF00' }}>{rate}</span>
+                          </div>
+                          {tot > 0 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 10 }}>{hit}/{tot} attempts</div>}
+                          {[{ key: s.key + '_hit', label: s.hitL, val: hit }, { key: s.key + '_miss', label: s.missL, val: miss }].map(row => (
+                            <div key={row.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                              <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{row.label}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                <button style={btnStyle} onClick={() => adjustStat(activeEntry.id, row.key, -1)}>−</button>
+                                <span style={{ fontSize: 18, fontWeight: 700, color: '#fff', minWidth: 28, textAlign: 'center' }}>{row.val}</span>
+                                <button style={plusStyle} onClick={() => adjustStat(activeEntry.id, row.key, 1)}>+</button>
                               </div>
                             </div>
                           ))}
                         </div>
                       )
                     }
-                    const val = stats.find(st => st.position_entry_id === activeEntry.id && st.stat_key === s.key)?.value || 0
+                    const val = getVal(activeEntry.id, s.key)
                     return (
-                      <div key={s.key} className="sblk">
-                        <div className="sblk-l">{s.label}</div>
-                        <div className="sblk-v">{val}</div>
-                        <div className="cc" style={{ marginTop: 8 }}>
-                          <button className="cb minus" onClick={() => adjustStat(activeEntry.id, s.key, -1)}>−</button>
-                          <span className="cv">{val}</span>
-                          <button className="cb plus" onClick={() => adjustStat(activeEntry.id, s.key, 1)}>+</button>
+                      <div key={s.key} style={{ background: '#1E1E1E', borderRadius: 12, padding: '14px 16px', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>{s.label}</div>
+                          <div style={{ fontSize: 32, fontWeight: 700, color: '#AAFF00', lineHeight: 1 }}>{val}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <button style={btnLgStyle} onClick={() => adjustStat(activeEntry.id, s.key, -1)}>−</button>
+                          <button style={plusLgStyle} onClick={() => adjustStat(activeEntry.id, s.key, 1)}>+</button>
                         </div>
                       </div>
                     )
@@ -241,19 +242,15 @@ export default function LiveMatch() {
                 </div>
               </>
             ) : (
-              <div className="nodata" style={{ padding: '.8rem 0' }}>Set a position to log stats</div>
+              <div style={{ padding: '1rem 0', color: '#888', fontSize: 14 }}>Set a position to log stats</div>
             )}
 
             {prevEntries.length > 0 && (
               <>
-                <div className="divider" />
-                <div className="slbl">Previous positions</div>
+                <div style={{ height: 1, background: 'rgba(0,0,0,0.08)', margin: '16px 0' }} />
+                <div className="slbl">Previous positions this match</div>
                 {prevEntries.map(e => (
-                  <div key={e.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '5px 0', borderBottom: '1px solid var(--b3)',
-                    fontSize: 12, color: 'var(--muted)'
-                  }}>
+                  <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid rgba(0,0,0,0.06)', fontSize: 13, color: '#666' }}>
                     <span className={`pp pp-${e.position}`}>{POSITION_LABELS[e.position]}</span>
                   </div>
                 ))}
@@ -262,6 +259,72 @@ export default function LiveMatch() {
           </div>
         )}
       </div>
+
+      {/* Finish match modal */}
+      {showFinishModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 380 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', marginBottom: 4 }}>Finish match</div>
+            <div style={{ fontSize: 14, color: '#888', marginBottom: 20 }}>vs {match.opponent}</div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>Final score</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+              <div>
+                <div style={{ fontSize: 11, color: '#888', textAlign: 'center', marginBottom: 6, fontWeight: 500 }}>Us</div>
+                <input
+                  type="number" min="0" max="99"
+                  value={ourScore}
+                  onChange={e => setOurScore(e.target.value)}
+                  placeholder="0"
+                  style={{ textAlign: 'center', fontSize: 28, fontWeight: 700, padding: '10px', border: '2px solid #AAFF00', borderRadius: 12, background: '#F9F9F9', color: '#1A1A1A' }}
+                />
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#888', paddingTop: 22 }}>—</div>
+              <div>
+                <div style={{ fontSize: 11, color: '#888', textAlign: 'center', marginBottom: 6, fontWeight: 500 }}>Them</div>
+                <input
+                  type="number" min="0" max="99"
+                  value={theirScore}
+                  onChange={e => setTheirScore(e.target.value)}
+                  placeholder="0"
+                  style={{ textAlign: 'center', fontSize: 28, fontWeight: 700, padding: '10px', border: '2px solid rgba(0,0,0,0.12)', borderRadius: 12, background: '#F9F9F9', color: '#1A1A1A' }}
+                />
+              </div>
+            </div>
+
+            {/* Auto result preview */}
+            {ourScore !== '' && theirScore !== '' && (
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                {(() => {
+                  const os = parseInt(ourScore), ts = parseInt(theirScore)
+                  const result = os > ts ? 'W' : os < ts ? 'L' : 'D'
+                  const colors = { W: { bg: '#AAFF00', text: '#1A1A1A' }, L: { bg: '#FF4444', text: '#fff' }, D: { bg: '#888', text: '#fff' } }
+                  const labels = { W: 'Win', L: 'Loss', D: 'Draw' }
+                  return (
+                    <span style={{ background: colors[result].bg, color: colors[result].text, padding: '6px 20px', borderRadius: 20, fontSize: 14, fontWeight: 700 }}>
+                      {labels[result]}
+                    </span>
+                  )
+                })()}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowFinishModal(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-neon" style={{ flex: 1, justifyContent: 'center' }} onClick={confirmFinish} disabled={finishing}>
+                {finishing ? 'Saving...' : 'Finish & save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+
+const btnStyle = { width: 40, height: 40, borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: '#2E2E2E', color: '#fff', fontSize: 22, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent', flexShrink: 0 }
+const plusStyle = { ...btnStyle, background: '#AAFF00', border: '1px solid #88CC00', color: '#1A1A1A', fontWeight: 700 }
+const btnLgStyle = { width: 52, height: 52, borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)', background: '#2E2E2E', color: '#fff', fontSize: 26, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent', flexShrink: 0 }
+const plusLgStyle = { ...btnLgStyle, background: '#AAFF00', border: '1px solid #88CC00', color: '#1A1A1A', fontWeight: 700 }
