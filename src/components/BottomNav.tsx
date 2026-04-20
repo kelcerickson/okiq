@@ -10,7 +10,7 @@ export default function BottomNav() {
       href: '/',
       label: 'Home',
       icon: (active: boolean) => (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#AAFF00' : 'rgba(255,255,255,0.5)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? '#AAFF00' : 'rgba(255,255,255,0.45)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
           <polyline points="9 22 9 12 15 12 15 22"/>
         </svg>
@@ -20,7 +20,7 @@ export default function BottomNav() {
       href: '/team',
       label: 'Team',
       icon: (active: boolean) => (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#AAFF00' : 'rgba(255,255,255,0.5)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? '#AAFF00' : 'rgba(255,255,255,0.45)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
           <circle cx="9" cy="7" r="4"/>
           <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
@@ -32,7 +32,7 @@ export default function BottomNav() {
       href: '/players',
       label: 'Players',
       icon: (active: boolean) => (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#AAFF00' : 'rgba(255,255,255,0.5)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? '#AAFF00' : 'rgba(255,255,255,0.45)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
           <circle cx="12" cy="7" r="4"/>
         </svg>
@@ -49,10 +49,9 @@ export default function BottomNav() {
     <nav style={{
       position: 'fixed',
       bottom: 0,
-      left: '50%',
-      transform: 'translateX(-50%)',
+      left: 0,
+      right: 0,
       width: '100%',
-      maxWidth: 480,
       background: '#1A1A1A',
       borderTop: '2px solid #AAFF00',
       display: 'flex',
@@ -68,16 +67,17 @@ export default function BottomNav() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '10px 0 8px',
+            padding: '10px 0 9px',
             textDecoration: 'none',
-            gap: 3,
-            background: active ? 'rgba(170,255,0,0.08)' : 'transparent',
+            gap: 4,
+            background: active ? 'rgba(170,255,0,0.1)' : 'transparent',
+            WebkitTapHighlightColor: 'transparent',
           }}>
             {tab.icon(active)}
             <span style={{
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: 600,
-              color: active ? '#AAFF00' : 'rgba(255,255,255,0.5)',
+              color: active ? '#AAFF00' : 'rgba(255,255,255,0.45)',
               letterSpacing: '.04em',
               textTransform: 'uppercase',
             }}>{tab.label}</span>
