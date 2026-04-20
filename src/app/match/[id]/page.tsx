@@ -26,7 +26,7 @@ export default function LiveMatch() {
     ])
     if (m) setMatch(m)
     if (mp) {
-      setMatchPlayers(mp as MatchPlayer[])
+      setMatchPlayers(mp as unknown as MatchPlayer[])
       if (!activePlayerId && mp.length) setActivePlayerId(mp[0].player_id)
       const mpIds = mp.map((p: MatchPlayer) => p.id)
       if (mpIds.length) {
