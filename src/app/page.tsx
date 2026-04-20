@@ -36,7 +36,7 @@ export default function Home() {
   return (
     <div className="shell">
       <header className="hdr">
-        <Image src="/logo.webp" alt="OK IQ" className="logo-img" width={120} height={56} style={{ height: 56, width: 'auto' }} />
+        <Image src="/logo.png" alt="OK IQ" className="logo-img" width={120} height={56} style={{ height: 56, width: 'auto' }} />
       </header>
       <div className="body">
         <div className="home-hero">
