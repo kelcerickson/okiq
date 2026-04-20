@@ -55,7 +55,7 @@ export default function PlayersPage() {
   return (
     <div className="shell">
       <header className="hdr">
-        <Image src="/logo.webp" alt="OK IQ" className="logo-img" width={120} height={56} style={{ height: 56, width: 'auto' }} />
+        <Image src="/logo.png" alt="OK IQ" className="logo-img" width={120} height={56} style={{ height: 56, width: 'auto' }} />
       </header>
       <div className="body">
         <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 16, color: '#fff' }}>Players</div>
