@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import BottomNav from '@/components/BottomNav'
 
 export const metadata: Metadata = {
   title: 'OK IQ — Club Stat Tracker',
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body style={{ paddingBottom: 70 }}>
+        {children}
+        <BottomNav />
+      </body>
     </html>
   )
 }
