@@ -5,7 +5,6 @@ import BottomNav from '@/components/BottomNav'
 export const metadata: Metadata = {
   title: 'OK IQ — Club Stat Tracker',
   description: 'Youth soccer stat tracking for club teams',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
